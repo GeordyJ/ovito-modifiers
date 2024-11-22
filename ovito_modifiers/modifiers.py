@@ -7,6 +7,10 @@ from traits.api import Float, Int, ListFloat, ListInt
 
 # INFO: These modifiers were intended for a single trajectory frame.
 # Test the modifiers are working before using them.
+# Parameters:
+# pids: particle identifiers. This refers to the index of the particle
+# positions in trajectories starting from zero. These are the same as
+# the topology identifiers used by ovito bonds.
 
 
 class AddParticleIdentifierModifier(ovito.pipeline.ModifierInterface):
@@ -16,7 +20,7 @@ class AddParticleIdentifierModifier(ovito.pipeline.ModifierInterface):
         if data.particles.identifiers is None:
             data.particles_.create_property(
                 'Particle Identifier',
-                data=np.arange(1, len(data.particles.positions) + 1),
+                data=np.arange(0, len(data.particles.positions) + 1),
             )
 
 
@@ -27,26 +31,23 @@ class AlignParticlesToXAxisModifier(ovito.pipeline.ModifierInterface):
     on the x-axis, such that A(0,0,0) and B(L,0,0), where L is the
     distance between A and B.
 
-    pids- particle identifiers. If the pid is not specified in the input
-    trajectory then it is set to the index of the positions starting at 1
+    pids- particle identifiers
     """
 
     pids = ListInt([0, 0], label='particle_ids')   # A id, B id
 
     def modify(self, data: ovito.data.DataCollection, **kwargs):
         for id in self.pids:
-            if id <= 0 or id > len(data.particles.positions):
+            if id < 0 or id > len(data.particles.positions):
                 raise ValueError('Enter valid particle_ids')
-            if data.particles.identifiers is None:
-                raise ValueError('Particle Identifiers Not Found')
 
         positions = data.particles_.positions_
 
         # Translate system so A is at the origin
-        positions -= positions[self.pids[0] - 1]
+        positions -= positions[self.pids[0]]
 
         # Rotate AB around x axis
-        vec_AB = positions[self.pids[1] - 1] - positions[self.pids[0] - 1]
+        vec_AB = positions[self.pids[1]] - positions[self.pids[0]]
         theta = np.arctan2(vec_AB[2], vec_AB[1])
         x_axis_rotation = np.array(
             [
@@ -58,7 +59,7 @@ class AlignParticlesToXAxisModifier(ovito.pipeline.ModifierInterface):
         positions = np.dot(positions, x_axis_rotation)
 
         # Rotate AB around z axis
-        vec_AB = positions[self.pids[1] - 1] - positions[self.pids[0] - 1]
+        vec_AB = positions[self.pids[1]] - positions[self.pids[0]]
         theta = np.arctan2(vec_AB[1], vec_AB[0])
         z_axis_rotation = np.array(
             [
@@ -72,12 +73,12 @@ class AlignParticlesToXAxisModifier(ovito.pipeline.ModifierInterface):
         data.particles_.positions_[:] = positions
 
         bond_AB = np.linalg.norm(
-            positions[self.pids[1] - 1] - positions[self.pids[0] - 1]
+            positions[self.pids[1]] - positions[self.pids[0]]
         )
         # print('L_AB:', bond_AB)
         # print('Position A:', positions[self.pids[0] - 1])
         # print('Position B:', positions[self.pids[1] - 1])
-        if False in np.isclose(positions[self.pids[1] - 1], [bond_AB, 0, 0]):
+        if False in np.isclose(positions[self.pids[1]], [bond_AB, 0, 0]):
             raise RuntimeError('Unable to align... Check values.')
 
 
@@ -89,6 +90,9 @@ class ChangeAtomPositionModifier(ovito.pipeline.ModifierInterface):
 
     It only changes a SINGLE atom, cation must be taken not to cause
     overlaps or unphysical geometry.
+
+    Parameter:
+    pid: particle id
     """
 
     pid = Int(0, label='particle_id')   # B id
@@ -99,13 +103,13 @@ class ChangeAtomPositionModifier(ovito.pipeline.ModifierInterface):
             raise ValueError('Enter valid particle_ids')
         if data.particles.identifiers is None:
             raise ValueError('Particle Identifiers Not Found')
-        coords = data.particles_.positions_[self.pid - 1]
+        coords = data.particles_.positions_[self.pid]
         for index, coord in enumerate(self.new_coords):
             if not np.isnan(coord):
                 coords[index] = coord
                 print(coord)
 
-        data.particles_.positions_[self.pid - 1] = coords
+        data.particles_.positions_[self.pid] = coords
 
 
 class CalculateBondLengthModifier(ovito.pipeline.ModifierInterface):
@@ -139,20 +143,20 @@ class ChangeBondLengthModifier(ovito.pipeline.ModifierInterface):
     all the particles bonded to B while maintaining bond angles.
 
     Parameters:
-    bids: The unique particle identifier, obtained from ovito bond Topology.
+    pids: The unique particle identifier, obtained from ovito bond Topology.
     length: The new length of the bond.
 
     Note:
     If bonds are not present, it creates bonds using ovito (with VDW radius)
     """
 
-    bids = ListInt([0, 0], label='particle_ids')   # A id, B id
+    pids = ListInt([0, 0], label='particle_ids')   # A id, B id
     length = Float(0, label='length')
 
     def modify(self, data: ovito.data.DataCollection, **kwargs):
         if self.length <= 0:
             raise ValueError('The "length" parameter must be > 0')
-        if self.bids[0] == self.bids[1]:
+        if self.pids[0] == self.pids[1]:
             raise ValueError(
                 'The particle identifier for "bids" must not be the same'
             )
@@ -172,13 +176,13 @@ class ChangeBondLengthModifier(ovito.pipeline.ModifierInterface):
                 expressions=['BondLength'],
             )
         )
-        selected_atoms = [self.bids[1]]
+        selected_atoms = [self.pids[1]]
         index = 0
         while index < len(selected_atoms):
             chosen_atom = selected_atoms[index]
             for bond in data.particles.bonds.topology[...]:
                 if chosen_atom in bond and not np.array_equal(
-                    np.sort(self.bids), np.sort(bond)
+                    np.sort(self.pids), np.sort(bond)
                 ):
                     atom_index = bond[0] if bond[0] != chosen_atom else bond[1]
                     if atom_index not in selected_atoms:
@@ -186,8 +190,8 @@ class ChangeBondLengthModifier(ovito.pipeline.ModifierInterface):
             index += 1
 
         vec_AB = (
-            data.particles.positions[self.bids[1]]
-            - data.particles.positions[self.bids[0]]
+            data.particles.positions[self.pids[1]]
+            - data.particles.positions[self.pids[0]]
         )
         mag_AB = np.linalg.norm(vec_AB)
         dir_vec_AB = vec_AB / mag_AB
@@ -232,6 +236,14 @@ class SelectRadicalGroup(ovito.pipeline.ModifierInterface):
     selects particle B and the group attached to it, except the A branch
     Uses ovito.modifiers.CreateBondsModifier.Mode.VdWRadius to determine
     bonds if bonds not present.
+
+    For example, if there is H3C-CH3, and the particle ids of the two C-C
+    bonds is provided then the modifier will select the CH3 radical. Which
+    radical being selected is determined by the position in the argument of
+    pids.
+
+    Parameters:
+    pids- Particle identifiers
     """
 
     pids = ListInt([0, 0], label='particle_ids')
@@ -256,9 +268,7 @@ class SelectRadicalGroup(ovito.pipeline.ModifierInterface):
                     if atom_index not in selected_ids:
                         selected_ids.append(atom_index)
             index += 1
-        sel = [0] * len(positions)
+        selection = [0] * len(positions)
         for index, id in enumerate(selected_ids):
-            sel[id] = 1
-            print(index, id, positions[id])
-        print(sel)
-        data.particles_.create_property('Selection', data=sel)
+            selection[id] = 1
+        data.particles_.create_property('Selection', data=selection)
