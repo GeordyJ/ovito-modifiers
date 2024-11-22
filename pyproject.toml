@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling", "numpy", "ovito"]
+requires = ["hatchling", "numpy", "ovito", "traits"]
 build-backend = "hatchling.build"
 
 [project]
 name = "ovito_modifiers"
-version = "0.1.0"
+version = "0.2.0"
 authors = [{ name = "Geordy Jomon", email = "gj82@njit.edu" }]
 description = "Custom modifiers using the Ovito python API"
 readme = "README.md"
