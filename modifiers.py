@@ -1,6 +1,12 @@
+# Geordy Jomon
+
 import numpy as np
 import ovito
 from traits.api import Float, Int, ListFloat, ListInt
+
+
+# INFO: These modifiers were intended for a single trajectory frame.
+# Test the modifiers are working before using them.
 
 
 class AddParticleIdentifierModifier(ovito.pipeline.ModifierInterface):
