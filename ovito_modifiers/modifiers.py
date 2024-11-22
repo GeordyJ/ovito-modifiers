@@ -255,7 +255,6 @@ class SelectRadicalGroup(ovito.pipeline.ModifierInterface):
                     mode=ovito.modifiers.CreateBondsModifier.Mode.VdWRadius
                 )
             )
-        positions = data.particles_.positions_
         selected_ids = [self.pids[1]]
         index = 0
         while index < len(selected_ids):
@@ -268,7 +267,7 @@ class SelectRadicalGroup(ovito.pipeline.ModifierInterface):
                     if atom_index not in selected_ids:
                         selected_ids.append(atom_index)
             index += 1
-        selection = [0] * len(positions)
-        for index, id in enumerate(selected_ids):
-            selection[id] = 1
+        selection = np.zeros(len(data.particles.positions), dtype=int)
+        selection[selected_ids] = 1
+        print(selection)
         data.particles_.create_property('Selection', data=selection)
